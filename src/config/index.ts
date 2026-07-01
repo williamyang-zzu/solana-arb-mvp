@@ -41,7 +41,7 @@ export const config = {
     dlmmPair: new PublicKey(required("DLMM_PAIR")),
   },
 
-  inputSol: numberEnv("INPUT_SOL", 0.001),
+  inputSol: numberEnv("INPUT_SOL", 0.0001),
   slippageBps: numberEnv("SLIPPAGE_BPS", 300),
   sendTx: boolEnv("SEND_TX", false),
 };

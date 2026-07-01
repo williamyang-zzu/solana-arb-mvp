@@ -15,6 +15,7 @@ import {
   buildCloseWsolIx,
   buildWrapSolIxs,
   createAtaIdempotentIx,
+  getTokenProgramIdForMint,
   ata,
 } from "../wallet/wallet.js";
 
@@ -38,6 +39,11 @@ export async function executeArb(params: ExecuteArbParams): Promise<void> {
   console.log(`inputSOL  = ${params.inputSol}`);
   console.log(`slippage  = ${params.slippageBps} bps`);
 
+  const tokenProgramId = await getTokenProgramIdForMint(
+    params.connection,
+    params.pair.tokenMint,
+  );
+
   const setupIxs = [
     ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }),
     ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1_000 }),
@@ -50,6 +56,7 @@ export async function executeArb(params: ExecuteArbParams): Promise<void> {
       payer: user,
       owner: user,
       mint: params.pair.tokenMint,
+      tokenProgramId,
     }),
   ];
 
@@ -64,7 +71,6 @@ export async function executeArb(params: ExecuteArbParams): Promise<void> {
 
   console.log("\n=== Pump quote ===");
   console.log(pump.quote);
-
   const dlmm = await buildDlmmSellIxs({
     connection: params.connection,
     user,

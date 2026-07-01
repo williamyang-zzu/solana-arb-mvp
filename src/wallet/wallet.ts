@@ -12,6 +12,7 @@ import {
 import {
   NATIVE_MINT,
   TOKEN_PROGRAM_ID,
+  TOKEN_2022_PROGRAM_ID,
   createAssociatedTokenAccountIdempotentInstruction,
   createCloseAccountInstruction,
   createSyncNativeInstruction,
@@ -38,20 +39,45 @@ export function loadKeypair(params: {
   throw new Error("Set PRIVATE_KEY_BASE58 or KEYPAIR_PATH in .env");
 }
 
-export function ata(owner: PublicKey, mint: PublicKey): PublicKey {
-  return getAssociatedTokenAddressSync(mint, owner, false, TOKEN_PROGRAM_ID);
+export function ata(owner: PublicKey, mint: PublicKey, tokenProgramId: PublicKey = TOKEN_PROGRAM_ID): PublicKey {
+  return getAssociatedTokenAddressSync(mint, owner, false, tokenProgramId);
 }
 
 export function createAtaIdempotentIx(params: {
   payer: PublicKey;
   owner: PublicKey;
   mint: PublicKey;
+  tokenProgramId?: PublicKey;
 }): TransactionInstruction {
+  const tokenProgramId = params.tokenProgramId ?? TOKEN_PROGRAM_ID;
   return createAssociatedTokenAccountIdempotentInstruction(
     params.payer,
-    ata(params.owner, params.mint),
+    ata(params.owner, params.mint, tokenProgramId),
     params.owner,
     params.mint,
+    tokenProgramId,
+  );
+}
+
+export async function getTokenProgramIdForMint(
+  connection: Connection,
+  mint: PublicKey,
+): Promise<PublicKey> {
+  const accountInfo = await connection.getAccountInfo(mint, "confirmed");
+  if (!accountInfo) {
+    throw new Error(`Mint account not found: ${mint.toBase58()}`);
+  }
+
+  if (accountInfo.owner.equals(TOKEN_PROGRAM_ID)) {
+    return TOKEN_PROGRAM_ID;
+  }
+
+  if (accountInfo.owner.equals(TOKEN_2022_PROGRAM_ID)) {
+    return TOKEN_2022_PROGRAM_ID;
+  }
+
+  throw new Error(
+    `Unsupported token program owner for mint ${mint.toBase58()}: ${accountInfo.owner.toBase58()}`,
   );
 }
 
