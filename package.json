@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx src/main.ts",
+    "alt:create": "tsx scripts/create-route-alt.ts",
     "check": "tsc --noEmit",
     "build": "tsc",
     "start": "node dist/main.js"
@@ -23,5 +24,10 @@
     "@types/node": "^22.10.2",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
+  },
+  "overrides": {
+    "rpc-websockets": {
+      "uuid": "8.3.2"
+    }
   }
 }

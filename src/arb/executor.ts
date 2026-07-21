@@ -1,9 +1,11 @@
 import {
+  AddressLookupTableAccount,
   ComputeBudgetProgram,
   Connection,
   Keypair,
-  Transaction,
-  sendAndConfirmTransaction,
+  PublicKey,
+  TransactionMessage,
+  VersionedTransaction,
 } from "@solana/web3.js";
 import { NATIVE_MINT } from "@solana/spl-token";
 import type { TokenPairConfig } from "../types.js";
@@ -19,13 +21,55 @@ import {
   ata,
 } from "../wallet/wallet.js";
 
+const METEORA_MAINNET_ALT = new PublicKey(
+  "JA5F83HUK9L78Y12TRLCsJZbu3Tv8pCK1GfK8mVNp1sz",
+);
+
 export interface ExecuteArbParams {
   connection: Connection;
   wallet: Keypair;
   pair: TokenPairConfig;
   inputSol: number;
   slippageBps: number;
+  addressLookupTables: PublicKey[];
   sendTx: boolean;
+}
+
+async function loadAddressLookupTables(
+  connection: Connection,
+  lookupTableAddresses: PublicKey[],
+): Promise<AddressLookupTableAccount[]> {
+  const uniqueAddresses = [
+    ...new Map(
+      lookupTableAddresses.map((address) => [address.toBase58(), address]),
+    ).values(),
+  ];
+
+  const lookupTables = await Promise.all(
+    uniqueAddresses.map(async (address) => {
+      const table = await connection.getAddressLookupTable(address);
+      if (!table.value) {
+        throw new Error(`Address lookup table not found: ${address.toBase58()}`);
+      }
+      return table.value;
+    }),
+  );
+
+  return lookupTables;
+}
+
+function explainVersionedTxSizeError(err: unknown): Error {
+  if (err instanceof RangeError && err.message.includes("encoding overruns")) {
+    return new Error(
+      [
+        "Versioned transaction is still too large after loading available ALTs.",
+        "Meteora's public ALT is loaded automatically, but this Pump+Meteora atomic route also needs a custom route ALT containing Pump AMM and route-specific accounts.",
+        "Create/extend a lookup table for this route, then set ADDRESS_LOOKUP_TABLES=<your_alt_address> in .env and rerun.",
+      ].join(" "),
+    );
+  }
+
+  return err instanceof Error ? err : new Error(String(err));
 }
 
 export async function executeArb(params: ExecuteArbParams): Promise<void> {
@@ -76,7 +120,7 @@ export async function executeArb(params: ExecuteArbParams): Promise<void> {
     user,
     tokenMint: params.pair.tokenMint,
     dlmmPair: params.pair.dlmmPair,
-    inputTokenAmount: pump.quote.expectedOutAmount,
+    inputTokenAmount: pump.quote.minOutAmount,
     slippageBps: params.slippageBps,
   });
 
@@ -87,18 +131,30 @@ export async function executeArb(params: ExecuteArbParams): Promise<void> {
   printInstructions("pump", pump.instructions);
   printInstructions("meteora", dlmm.instructions);
 
-  const tx = new Transaction();
-  tx.add(
+  const instructions = [
     ...setupIxs,
     ...pump.instructions,
     ...dlmm.instructions,
     buildCloseWsolIx(user),
-  );
-
-  tx.feePayer = user;
+  ];
   const latest = await params.connection.getLatestBlockhash("confirmed");
-  tx.recentBlockhash = latest.blockhash;
-  tx.sign(params.wallet);
+  const lookupTables = await loadAddressLookupTables(params.connection, [
+    METEORA_MAINNET_ALT,
+    ...params.addressLookupTables,
+  ]);
+
+  const message = new TransactionMessage({
+    payerKey: user,
+    recentBlockhash: latest.blockhash,
+    instructions,
+  }).compileToV0Message(lookupTables);
+
+  const tx = new VersionedTransaction(message);
+  try {
+    tx.sign([params.wallet]);
+  } catch (err) {
+    throw explainVersionedTxSizeError(err);
+  }
 
   console.log("\n=== Simulating transaction ===");
   const sim = await params.connection.simulateTransaction(tx);
@@ -117,8 +173,15 @@ export async function executeArb(params: ExecuteArbParams): Promise<void> {
   }
 
   console.log("\n=== Sending transaction ===");
-  const sig = await sendAndConfirmTransaction(params.connection, tx, [params.wallet], {
-    commitment: "confirmed",
+  const sig = await params.connection.sendTransaction(tx, {
+    skipPreflight: false,
+    preflightCommitment: "confirmed",
+  });
+
+  await params.connection.confirmTransaction({
+    signature: sig,
+    blockhash: latest.blockhash,
+    lastValidBlockHeight: latest.lastValidBlockHeight,
   });
 
   console.log(`signature = ${sig}`);

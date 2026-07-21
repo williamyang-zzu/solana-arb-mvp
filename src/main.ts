@@ -19,6 +19,7 @@ async function main(): Promise<void> {
     pair: config.pair,
     inputSol: config.inputSol,
     slippageBps: config.slippageBps,
+    addressLookupTables: config.addressLookupTables,
     sendTx: config.sendTx,
   });
 }

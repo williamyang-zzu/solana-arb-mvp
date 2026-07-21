@@ -30,6 +30,17 @@ function numberEnv(name: string, defaultValue: number): number {
   return parsed;
 }
 
+function publicKeyListEnv(name: string): PublicKey[] {
+  const value = optional(name);
+  if (value === undefined) return [];
+
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0)
+    .map((item) => new PublicKey(item));
+}
+
 export const config = {
   rpcUrl: required("RPC_URL"),
   privateKeyBase58: optional("PRIVATE_KEY_BASE58"),
@@ -43,5 +54,6 @@ export const config = {
 
   inputSol: numberEnv("INPUT_SOL", 0.0001),
   slippageBps: numberEnv("SLIPPAGE_BPS", 300),
+  addressLookupTables: publicKeyListEnv("ADDRESS_LOOKUP_TABLES"),
   sendTx: boolEnv("SEND_TX", false),
 };
