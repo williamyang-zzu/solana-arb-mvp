@@ -1,4 +1,3 @@
-import { TransactionInstruction } from "@solana/web3.js";
 import type { Connection, PublicKey } from "@solana/web3.js";
 import { NATIVE_MINT } from "@solana/spl-token";
 import BN from "bn.js";
@@ -40,23 +39,6 @@ function bnToBigint(value: BN): bigint {
 
 function slippageBpsToPercent(slippageBps: number): number {
   return slippageBps / 100;
-}
-
-function encodeU64(value: BN): Buffer {
-  return value.toArrayLike(Buffer, "le", 8);
-}
-
-function encodeBuyExactQuoteInData(params: {
-  spendableQuoteIn: BN;
-  minBaseAmountOut: BN;
-  trackVolume: boolean;
-}): Buffer {
-  return Buffer.concat([
-    Buffer.from([198, 46, 21, 82, 180, 217, 232, 112]),
-    encodeU64(params.spendableQuoteIn),
-    encodeU64(params.minBaseAmountOut),
-    Buffer.from([params.trackVolume ? 1 : 0]),
-  ]);
 }
 
 async function getPumpSwapState(params: BuildPumpBuyParams) {
@@ -134,10 +116,12 @@ export async function buildPumpBuyIxs(
     minOutAmount: applySlippageBps(expectedOutAmount, params.slippageBps),
   };
 
+  const targetBaseOut = bnFromBigint(quote.minOutAmount);
+  const maxQuoteIn = bnFromBigint(params.inputLamports);
   const templateInstructions = await PUMP_AMM_SDK.buyInstructions(
     swapState,
-    sdkQuote.base,
-    sdkQuote.maxQuote,
+    targetBaseOut,
+    maxQuoteIn,
   );
   const buyTemplateIx = templateInstructions.find(
     (ix) => ix.programId.equals(PUMP_AMM_PROGRAM_ID) && ix.data.length > 8,
@@ -147,23 +131,9 @@ export async function buildPumpBuyIxs(
     throw new Error("Pump AMM buy instruction not found in SDK template");
   }
 
-  const buyExactQuoteInData = encodeBuyExactQuoteInData({
-    spendableQuoteIn: bnFromBigint(params.inputLamports),
-    minBaseAmountOut: bnFromBigint(quote.minOutAmount),
-    trackVolume: true,
-  });
-
-  const instructions = [
-    new TransactionInstruction({
-      programId: buyTemplateIx.programId,
-      keys: buyTemplateIx.keys,
-      data: buyExactQuoteInData,
-    }),
-  ];
-
   return {
     dex: "pump",
     quote,
-    instructions,
+    instructions: [buyTemplateIx],
   };
 }
