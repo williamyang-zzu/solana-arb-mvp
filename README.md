@@ -57,3 +57,10 @@ src/arb/         套利执行主流程：quote -> build ix -> tx -> simulate/sen
 src/utils/       日志、instruction 打印、数字工具
 src/main.ts      CLI 程序入口
 ```
+
+
+## 里程碑记录
+
+```text
+首次完成Pump AMM买入和Meteora DLMM卖出的原子transaction         https://solscan.io/tx/2WJx9jBnwgdbK1NmVAuDgC9Fy1X8JzqFmCrWMmR14Mfjy6KeiFdgbHUhmFaf3Si3X2vpVCiDkNiqPPfYjFDMEDqw
+```
